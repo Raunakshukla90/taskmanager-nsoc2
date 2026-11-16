@@ -13,6 +13,8 @@ import {
   screen,
   fireEvent,
   act,
+  cleanup,
+  within,
 } from "@testing-library/react";
 
 import PomodoroTimer from "./PomodoroTimer";
@@ -24,6 +26,8 @@ describe("Pomodoro Timer", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -31,6 +35,14 @@ describe("Pomodoro Timer", () => {
     act(() => {
       vi.advanceTimersByTime(milliseconds);
     });
+  };
+
+  const clickButton = (name) => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  };
+
+  const startTimer = () => {
+    clickButton("▶ Start");
   };
 
   it("renders the default focus timer", () => {
@@ -42,7 +54,7 @@ describe("Pomodoro Timer", () => {
   it("starts the timer", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
+    startTimer();
 
     expect(screen.getByText("⏸ Pause")).toBeTruthy();
   });
@@ -50,8 +62,7 @@ describe("Pomodoro Timer", () => {
   it("counts down accurately", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(1000);
 
     expect(screen.getByRole("timer").textContent).toBe("24:59");
@@ -60,11 +71,10 @@ describe("Pomodoro Timer", () => {
   it("pauses the timer", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(3000);
 
-    fireEvent.click(screen.getByText("⏸ Pause"));
+    clickButton("⏸ Pause");
 
     const pausedTime = screen.getByRole("timer").textContent;
 
@@ -76,13 +86,11 @@ describe("Pomodoro Timer", () => {
   it("resumes the timer after pausing", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(2000);
 
-    fireEvent.click(screen.getByText("⏸ Pause"));
-
-    fireEvent.click(screen.getByText("▶ Start"));
+    clickButton("⏸ Pause");
+    startTimer();
 
     advanceTime(1000);
 
@@ -92,11 +100,10 @@ describe("Pomodoro Timer", () => {
   it("resets the timer", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(5000);
 
-    fireEvent.click(screen.getByText("↻ Reset"));
+    clickButton("↻ Reset");
 
     expect(screen.getByRole("timer").textContent).toBe("25:00");
   });
@@ -110,13 +117,11 @@ describe("Pomodoro Timer", () => {
 
     fireEvent.blur(screen.getByLabelText("Focus (minutes)"));
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(60000);
 
     expect(
-      screen.getByRole("button", { name: "Short Break" })
-        .getAttribute("aria-pressed")
+      screen.getByRole("button", { name: "Short Break" }).getAttribute("aria-pressed")
     ).toBe("true");
 
     expect(screen.getByRole("timer").textContent).toBe("05:00");
@@ -137,26 +142,24 @@ describe("Pomodoro Timer", () => {
       target: { value: "2" },
     });
 
-    fireEvent.click(screen.getByText("Apply Settings"));
+    clickButton("Apply Settings");
 
     for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getByText("▶ Start"));
+      startTimer();
       advanceTime(60000);
 
       if (i < 3) {
         expect(
-          screen.getByRole("button", { name: "Short Break" })
-            .getAttribute("aria-pressed")
+          screen.getByRole("button", { name: "Short Break" }).getAttribute("aria-pressed")
         ).toBe("true");
 
-        fireEvent.click(screen.getByText("▶ Start"));
+        startTimer();
         advanceTime(60000);
       }
     }
 
     expect(
-      screen.getByRole("button", { name: "Long Break" })
-        .getAttribute("aria-pressed")
+      screen.getByRole("button", { name: "Long Break" }).getAttribute("aria-pressed")
     ).toBe("true");
 
     expect(screen.getByRole("timer").textContent).toBe("02:00");
@@ -165,17 +168,15 @@ describe("Pomodoro Timer", () => {
   it("returns to focus after a break", () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("Short Break"));
+    clickButton("Short Break");
 
     expect(screen.getByRole("timer").textContent).toBe("05:00");
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(300000);
 
     expect(
-      screen.getByRole("button", { name: "Focus Time" })
-        .getAttribute("aria-pressed")
+      screen.getByRole("button", { name: "Focus Time" }).getAttribute("aria-pressed")
     ).toBe("true");
 
     expect(screen.getByRole("timer").textContent).toBe("25:00");
@@ -195,10 +196,17 @@ describe("Pomodoro Timer", () => {
       screen.getByLabelText("Associate with a task"),
       { target: { value: "1" } }
     );
+expect(
+  screen.getByText("Learn React", { selector: "strong" })
+).toBeTruthy();
 
     expect(
-      screen.getByText("Current task: Learn React")
-    ).toBeTruthy();
+  screen.getByLabelText("Associate with a task").value
+).toBe("1");
+
+expect(
+  screen.getByText("Learn React", { selector: "strong" })
+).toBeTruthy();
   });
 
   it("does not automatically complete tasks", () => {
@@ -208,8 +216,7 @@ describe("Pomodoro Timer", () => {
 
     render(<PomodoroTimer tasks={tasks} />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
-
+    startTimer();
     advanceTime(1000);
 
     expect(tasks[0].completed).toBe(false);
@@ -218,7 +225,7 @@ describe("Pomodoro Timer", () => {
   it("cleans up the interval on unmount", () => {
     const { unmount } = render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByText("▶ Start"));
+    startTimer();
 
     expect(vi.getTimerCount()).toBe(1);
 
@@ -226,5 +233,5 @@ describe("Pomodoro Timer", () => {
 
     expect(vi.getTimerCount()).toBe(0);
   });
-
 });
+
