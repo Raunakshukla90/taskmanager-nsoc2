@@ -1,10 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { isOverdue } from '../utils/taskUtils';
+import { getSubtaskProgress, formatSubtaskProgress } from '../utils/subtaskUtils';
+import SubtaskList from './SubtaskList';
 
-export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateText }) {
+export default function TaskItem({ task, reorder, onToggleComplete, onDelete, onUpdateText, onUpdateTask }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showSubtasks, setShowSubtasks] = useState(false);
+  const panelUid = useId();
   const [editText, setEditText] = useState(task.text);
   const editInputRef = useRef(null);
+  const moveUpRef = useRef(null);
+  const moveDownRef = useRef(null);
+  const focusAfterMove = useRef(null);
 
   useEffect(() => {
     if (isEditing) {
@@ -12,6 +19,17 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
       editInputRef.current?.select();
     }
   }, [isEditing]);
+
+  // A move re-inserts the row in the DOM, which drops keyboard focus, and the
+  // button itself gets disabled at the end of the list. Keep focus on this row.
+  useEffect(() => {
+    if (!focusAfterMove.current) return;
+    const [wanted, fallback] = focusAfterMove.current === 'up'
+      ? [moveUpRef.current, moveDownRef.current]
+      : [moveDownRef.current, moveUpRef.current];
+    focusAfterMove.current = null;
+    (wanted?.disabled ? fallback : wanted)?.focus();
+  });
 
   const handleSave = () => {
     const trimmed = editText.trim();
@@ -23,6 +41,20 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
     setIsEditing(false);
   };
 
+  const handleMove = (direction, move) => {
+    focusAfterMove.current = direction;
+    move();
+  };
+
+  const handleDragStart = (e) => {
+    // Firefox only starts a drag with data set. The custom type stops the row
+    // from being dropped as text into the search box.
+    e.dataTransfer.setData('application/x-task-reorder', task.text);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setDragImage(e.currentTarget.closest('li'), 16, 16);
+    reorder.onDragStart();
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       handleSave();
@@ -32,11 +64,32 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
     }
   };
 
+  const rowClass = [
+    task.completed && 'is-complete',
+    reorder?.isDragging && 'is-dragging',
+    reorder?.dropPlace && `drop-${reorder.dropPlace}`
+  ].filter(Boolean).join(' ');
+
   const priorityClass = String(task.priority || 'medium').toLowerCase();
   const overdue = isOverdue(task);
+  const progress = getSubtaskProgress(task);
+  const panelId = `subtasks-${panelUid}`;
 
   return (
-    <li className={task.completed ? 'is-complete' : ''}>
+    <li className={rowClass} onDragOver={reorder?.onDragOver}>
+      {reorder && (
+        <span
+          className="drag-handle"
+          draggable="true"
+          title="Drag to reorder"
+          aria-hidden="true"
+          onDragStart={handleDragStart}
+          onDragEnd={reorder.onDragEnd}
+        >
+          &#8942;&#8942;
+        </span>
+      )}
+
       <span
         className={`status-dot priority-${priorityClass}`}
         aria-label={`${task.priority || 'Medium'} priority`}
@@ -65,6 +118,19 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
             {`${task.text} | Due: ${task.dueDate || 'No date'}`}
           </span>
         )}
+
+        {progress.total > 0 && (
+          <span
+            className={`subtask-progress${progress.done === progress.total ? ' is-all-done' : ''}`}
+            role="img"
+            aria-label={`${progress.done} of ${progress.total} subtasks done`}
+          >
+            <span className="subtask-progress-bar" aria-hidden="true">
+              <span style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+            </span>
+            <span aria-hidden="true">{formatSubtaskProgress(task)}</span>
+          </span>
+        )}
       </span>
 
       {task.completed && (
@@ -76,6 +142,32 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
       )}
 
       <div className="action-buttons">
+        {reorder && (
+          <div className="move-buttons">
+            <button
+              ref={moveUpRef}
+              type="button"
+              className="move-button"
+              aria-label={`Move ${task.text} up`}
+              title="Move up"
+              disabled={!reorder.canMoveUp}
+              onClick={() => handleMove('up', reorder.onMoveUp)}
+            >
+              &uarr;
+            </button>
+            <button
+              ref={moveDownRef}
+              type="button"
+              className="move-button"
+              aria-label={`Move ${task.text} down`}
+              title="Move down"
+              disabled={!reorder.canMoveDown}
+              onClick={() => handleMove('down', reorder.onMoveDown)}
+            >
+              &darr;
+            </button>
+          </div>
+        )}
         <button
           type="button"
           className="edit-button"
@@ -83,6 +175,16 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
           onClick={() => setIsEditing(true)}
         >
           Edit
+        </button>
+        <button
+          type="button"
+          className="subtask-toggle"
+          aria-expanded={showSubtasks}
+          aria-controls={panelId}
+          aria-label={`${showSubtasks ? 'Hide' : 'Show'} subtasks for ${task.text}`}
+          onClick={() => setShowSubtasks(prev => !prev)}
+        >
+          Subtasks
         </button>
         <button
           type="button"
@@ -100,6 +202,10 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onUpdateTex
           Delete
         </button>
       </div>
+
+      {showSubtasks && (
+        <SubtaskList task={task} panelId={panelId} onUpdateTask={onUpdateTask} />
+      )}
     </li>
   );
 }

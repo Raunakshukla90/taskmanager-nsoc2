@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { getDropPlace } from '../utils/reorderUtils';
 import TaskItem from './TaskItem';
 import { isOverdue, sortTasks, groupTasksByMonth } from '../utils/taskUtils';
 
@@ -6,10 +7,13 @@ export default function TaskList({
   tasks,
   currentFilter,
   searchQuery,
+  reorderEnabled,
+  onMoveTask,
   currentSort,
   onToggleComplete,
   onDeleteTask,
-  onUpdateTaskText
+  onUpdateTaskText,
+  onUpdateTask
 }) {
   const visibleTasks = tasks
     .filter(task => {
@@ -22,6 +26,9 @@ export default function TaskList({
       if (!searchQuery) return true;
       return task.text.toLowerCase().includes(searchQuery.toLowerCase());
     });
+
+  const [draggedTask, setDraggedTask] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
 
   if (visibleTasks.length === 0) {
     let emptyMsg = 'No tasks found. Add a task above to get started!';
@@ -60,11 +67,12 @@ export default function TaskList({
             )}
             {group.tasks.map((task, tIdx) => (
               <TaskItem
-                key={`${task.text}-${task.dueDate}-${tIdx}`}
+                key={task.id || `${task.text}-${task.dueDate}-${tIdx}`}
                 task={task}
                 onToggleComplete={onToggleComplete}
                 onDelete={onDeleteTask}
                 onUpdateText={onUpdateTaskText}
+                onUpdateTask={onUpdateTask}
               />
             ))}
           </React.Fragment>
@@ -75,15 +83,63 @@ export default function TaskList({
 
   const sortedTasks = sortTasks(visibleTasks, currentSort);
 
+  const stopDragging = () => {
+    setDraggedTask(null);
+    setDropTarget(null);
+  };
+
+  // draggedTask is only set by our own handle, so a file dragged in from the
+  // desktop is not treated as a drop.
+  const handleRowDragOver = (e, task) => {
+    if (!draggedTask) return;
+    const place = getDropPlace(e.clientY, e.currentTarget.getBoundingClientRect());
+    setDropTarget(prev => (prev?.task === task && prev.place === place ? prev : { task, place }));
+  };
+
+  // Drop is handled on the list so the small gaps between rows count too.
+  const handleListDragOver = (e) => {
+    if (!draggedTask) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleListDrop = (e) => {
+    if (!draggedTask) return;
+    e.preventDefault();
+    if (dropTarget) onMoveTask(draggedTask, dropTarget.task, dropTarget.place);
+    stopDragging();
+  };
+
+  const getReorderProps = (task, idx) => ({
+    canMoveUp: idx > 0,
+    canMoveDown: idx < sortedTasks.length - 1,
+    isDragging: draggedTask === task,
+    dropPlace: dropTarget?.task === task ? dropTarget.place : null,
+    onMoveUp: () => onMoveTask(task, sortedTasks[idx - 1], 'before'),
+    onMoveDown: () => onMoveTask(task, sortedTasks[idx + 1], 'after'),
+    onDragStart: () => setDraggedTask(task),
+    onDragEnd: stopDragging,
+    onDragOver: (e) => handleRowDragOver(e, task)
+  });
+
   return (
-    <ul id="todo-list">
+    <ul
+      id="todo-list"
+      onDragOver={handleListDragOver}
+      onDrop={handleListDrop}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setDropTarget(null);
+      }}
+    >
       {sortedTasks.map((task, idx) => (
         <TaskItem
-          key={`${task.text}-${task.dueDate}-${idx}`}
+          key={task.id || `${task.text}-${task.dueDate}-${idx}`}
           task={task}
           onToggleComplete={onToggleComplete}
+          reorder={reorderEnabled ? getReorderProps(task, idx) : null}
           onDelete={onDeleteTask}
           onUpdateText={onUpdateTaskText}
+          onUpdateTask={onUpdateTask}
         />
       ))}
     </ul>

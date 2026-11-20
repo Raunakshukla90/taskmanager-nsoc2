@@ -213,6 +213,15 @@ task contents. All groups cards by due-date month, so it is not one globally sor
 across months. “Multi-criteria” refers to these available sort choices, not a UI for
 stacking several sort keys.
 
+### Reordering tasks
+
+In the Active list, with no search and the sort set to Default, drag a task by the handle on
+its left or use its up and down buttons. The buttons work with the keyboard and on touch
+screens, where the drag handle is hidden. The new order is saved with your tasks, so it stays
+after a refresh. Other views do not offer reordering: **All** is grouped by month, and the
+other filters, search and sorting do not show the stored order. Completed tasks keep their
+place in the stored list while they are hidden.
+
 ### Export and import
 
 Open **Backup & Restore Tasks** from the header. Export all tasks as JSON or CSV;
@@ -260,6 +269,32 @@ version only: a newer version asks again, and the skipped one starts by itself o
 tab and window of the app has been closed. On phones the prompt sits at the top of the
 page, above the app, so it stays clear of the task buttons and scrolls away with the page.
 
+**Offline notice:** when the connection drops, a short "You are offline" message appears
+in the page above the app, and "Back online" shows briefly afterwards. Like the update
+prompt it sits in the page flow instead of floating over the task buttons, so it is
+never in the way on small screens.
+
+**Accessibility:** the offline notice, update prompt and undo toast are `role="status"`
+live regions (polite), mounted before their text appears so screen readers announce it
+without stealing focus. **Reload**, **Later**, **Undo** and the dismiss button are plain
+buttons in the tab order with the standard 2px focus ring, and activate with Enter or Space.
+
+**Browser support:**
+
+| Browser | Service worker, offline | Install |
+| --- | --- | --- |
+| Chrome, Edge (desktop, Android) | Yes | Install icon or "Install app" |
+| Safari 16+ (macOS, iOS, iPadOS) | Yes | iOS/iPadOS: Share, Add to Home Screen |
+| Firefox desktop | Yes | No install prompt on desktop; works as a normal tab |
+| Firefox private windows | No service worker, so no offline use | - |
+
+Any browser without `serviceWorker` support (or with it blocked) still runs the app
+normally, it just needs a connection to load. Tasks are in `localStorage` in every case.
+Checked with Playwright at a 390px viewport on Chromium and WebKit (service worker
+activation, offline reload, update prompt, keyboard focus, no overlap with task
+controls). Firefox was not tested here, so its row comes from MDN compatibility data,
+not from a test run.
+
 **Troubleshooting:**
 
 - **No install option:** check that you are on HTTPS or localhost, not in a private window,
@@ -305,7 +340,7 @@ Use browser developer tools to run each command, then reload the page:
 
 Exciting features planned for future releases:
 
-- [ ] 🔄 **Drag-and-Drop Reordering**: Interactive task sequencing using HTML5 Drag and Drop API.
+- [x] 🔄 **Drag-and-Drop Reordering**: Interactive task sequencing using HTML5 Drag and Drop API.
 - [ ] 🏷️ **Custom Tags & Categories**: Multi-label tagging with custom color badges.
 - [ ] 📥 **Data Import / Export**: One-click JSON / CSV backup and restore.
 - [ ] 📋 **Subtasks & Nested Checklists**: Granular sub-item progress tracking.
